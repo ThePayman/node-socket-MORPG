@@ -1,0 +1,349 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title>Socket.io</title>
+
+    <style>
+        .Player {
+            position: absolute;
+            
+        }
+        .Player_object {
+            position: relative;
+            left: 0px;
+            top: 0px;
+            background-color: red;
+            height: 40px;
+            width: 40px;
+            -ms-transform: rotate(0deg); /* IE 9 */
+            -webkit-transform: rotate(0deg); /* Safari */
+            transform: rotate(0deg); /* Standard syntax */
+        }
+        .Monster {
+            background-color: green;
+            height: 40px;
+            width: 40px;
+            position: absolute;
+        }
+
+        .Unmovable {
+            background-color: yellow    ;
+            height: 20px;
+            width: 20px;
+            position: absolute;
+        }
+        .map_object {
+            height: 40px;
+            width: 40px;
+            position: absolute;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div style="width:200px"><form id='form'>
+        <input id="username" placeholder="Username"  style="width:100%"/><br /><br />
+        <input id="password" placeholder="Password"  style="width:100%"/><br /><br />
+        <input type="submit" style="width:100%" value="Entrar"/>
+    </form></div>
+    <div id="map" style="position:absolute;left:0px;top:0px;"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+
+<script>
+
+    class Position {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        /**
+         * Returns the distance between 2 Position objects.
+         * @param {Position} a - Position a
+         * @param {Position} b - Position b
+         * @return {number} Distance between a and b
+         */
+        static distance(a, b) {
+            return math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+        }
+    }
+
+    entity_list = [];
+
+    class Entity {
+        constructor(id, x, y, name, max_health, health, level) {
+            this.id = id;
+            this.position = new Position(x, y);
+            this.name = name;
+
+            this.dead = false;
+
+            this.max_health = max_health;
+            this.health = health;
+
+            this.level = level;
+
+            this.spawn();
+        }
+
+        spawn() {
+            this.element = document.createElement("div");
+            this.element.setAttribute('id', this.id);
+            this.element.setAttribute('class', this.constructor.name);
+
+            var player_object = document.createElement("div");
+            player_object.setAttribute('class', "Player_object");
+
+            var div_name_element = document.createElement("div");
+            var name_element = document.createElement("span");
+            name_element.innerHTML += this.name + " - " + this.level;
+
+            var div_health_element = document.createElement("div");
+            var div_current_health_element = document.createElement("div");
+
+            div_health_element.style.position = "relative";
+            div_health_element.style.top = -75 + "px";
+            div_health_element.style.width = 100 + "px";
+            div_health_element.style.left = -50 + ENTITY_SIZE / 2 + "px";
+            div_health_element.style.height = 10 + "px";
+            div_health_element.style.backgroundColor = "red";
+            console.log("1 " + this.max_health);
+            console.log("2 " + this.health);
+            div_current_health_element.style.width = (100 * (this.health / this.max_health)) + "px";
+            div_current_health_element.style.height = 10 + "px";
+            div_current_health_element.style.backgroundColor = "green";
+            div_health_element.appendChild(div_current_health_element);
+
+            div_name_element.style.position = "relative";
+            div_name_element.style.top = -75 + "px";
+            div_name_element.style.width = 100 + "px";
+            div_name_element.style.left = -50 + ENTITY_SIZE / 2 + "px";
+            div_name_element.style.textAlign = "center";
+            div_name_element.appendChild(name_element);
+
+            this.element.appendChild(player_object);
+            this.element.appendChild(div_name_element);
+            this.element.appendChild(div_health_element);
+
+            document.body.appendChild(this.element);
+
+            this.element.style.left = this.position.x - ENTITY_SIZE/2 + "px";
+            this.element.style.top = this.position.y - ENTITY_SIZE/2 + "px";
+
+            console.log("Spawn entity - id: " + this.id + " entity_type: " + this.constructor.name);
+            entity_list[this.id] = this;
+            console.log(entity_list[this.id]);
+        }
+
+        despawn() {
+            console.log("Despawn entity with id: " + this.id);
+            this.element.parentNode.removeChild(this.element);
+            delete entity_list[this.id];
+            //Might not actually delete the object
+        }
+
+        died() {
+            this.element.childNodes[2].childNodes[0].style.width = "0px";
+            this.dead = true;
+        }
+
+        update(x = null, y = null, rotation = null, max_health = null, health = null, level = null) {
+            if (health != 0 && this.dead){
+                this.dead = false;
+            }
+            if (x) {
+                this.position.x = x;
+                this.element.style.left = x - ENTITY_SIZE/2 + "px";
+            }
+            if (y) {
+                this.position.y = y;
+                this.element.style.top = y - ENTITY_SIZE/2 + "px";
+            }
+            if (rotation) {
+                var deg = rotation;
+                var player_object = this.element.childNodes[0];
+                player_object.style.webkitTransform = 'rotate(' + deg + 'deg)';
+                player_object.style.mozTransform = 'rotate(' + deg + 'deg)';
+                player_object.style.msTransform = 'rotate(' + deg + 'deg)';
+                player_object.style.oTransform = 'rotate(' + deg + 'deg)';
+                player_object.style.transform = 'rotate(' + deg + 'deg)'; 
+            }
+            if (health && max_health) {
+                this.health = health;
+                this.max_health = max_health;
+                var health_bar = this.element.childNodes[2].childNodes[0];
+                health_bar.style.width = (100 * (this.health / this.max_health)) + "px";
+            }
+            if (level) {
+                this.level = level;
+                this.element.childNodes[1].innerHTML = this.name + " - " + this.level;
+            }
+
+        }
+    }
+
+    class Movable extends Entity {
+
+    }
+
+    class Player extends Movable {
+
+    }
+
+    class Monster extends Movable {
+
+    }
+
+    class Unmovable extends Entity {
+
+    }
+
+    var ENTITY_SIZE = 40;
+
+
+    $('#form').submit(function () {
+        var socket = io();
+        var login_info = { username: $('#username').val(), password: $('#password').val() };
+        $('#username').val('');
+        $('#password').val('');
+        
+    $(function () {
+        var keys = {};
+
+        $(document).keydown(function (e) {
+            keys[e.which] = true;
+            update_keys(keys);
+
+        });
+        $(document).keyup(function (e) {
+            delete keys[e.which];
+            update_keys(keys);
+        });
+
+        $(document).mousemove(function (e) {
+            update_mouse(e.pageX,e.pageY);
+        });
+ 
+    });
+
+    
+    
+    socket.on('connect', function () {
+        console.log('connected');
+        socket.emit('login', login_info);
+        $('.map_object').remove();
+        entity_list = [];
+        $('.Player').remove();
+        $('.Monster').remove();
+        var form_element = document.getElementById('form'); //Hack
+        if(form_element) form_element.parentNode.removeChild(form_element); //Hack
+    });
+
+
+    socket.on('spawn_entity', function (entity_object) {
+        var entity_type;
+        switch (entity_object.entity_type) {
+            case "Player":
+                entity_type = Player;
+                break;
+            case "Monster":
+                entity_type = Monster;
+                break;
+            case "Unmovable":
+                entity_type = Unmovable;
+                break;
+            default:
+                entity_type = Entity;
+        }
+        var new_entity = new entity_type(entity_object.id,entity_object.x,entity_object.y,entity_object.name,entity_object.max_health,entity_object.health, entity_object.level);
+    });
+
+    socket.on('despawn_entity', function (entity) {
+        entity_list[entity.id].despawn();
+    });
+
+    socket.on('dead_entity', function (entity) {
+        entity_list[entity.id].died();
+    });
+
+    socket.on('self_player_died', function (){
+        console.log("You died");
+        respawn();
+    });
+
+    socket.on('update_entity', function (entity_update) {
+        var entity = entity_list[entity_update.id];
+        entity.update(entity_update.x, entity_update.y, entity_update.rotation, entity_update.max_health, entity_update.health, entity_update.level);
+    })
+    
+    socket.on('load_map', function (map) {
+        map_main_element = document.getElementById("map");
+        $('.map_object').remove();
+        entity_list = [];
+        $('.Player').remove();
+        $('.Monster').remove();
+        $('.Unmovable').remove();
+        var map_size_x = map.map_size_x;
+        var map_size_y = map.map_size_y;
+        var map = map.map;
+        var i = 0;
+        for (var y = 0; y < map_size_y; y++) {
+            for (var x = 0; x < map_size_x; x++) {
+                if (map[i] != "o") {
+                    element = document.createElement("div");
+                    element.setAttribute('class', 'map_object');
+                    element.style.left = 40 * x + "px";
+                    element.style.top = 40 * y + "px";
+                    if (map[i] == "x") {
+                        element.style.backgroundColor = "green";
+                    } else if (map[i] == "b") {
+                        element.style.backgroundColor = "blue";
+                    } else if (map[i] == "r") {
+                        element.style.backgroundColor = "red";
+                    }
+                    map_main_element.appendChild(element);
+                }
+                i++;
+            }
+        }
+
+
+        for (var i = 0; i < map.length; i++) {
+            console.log(map.charAt(i));
+            
+        }
+    });
+
+    socket.on('update_inventory', function (inventory) {
+        console.log(inventory);
+    });
+
+    socket.on('update_xp', function (xp_object) {
+        console.log(xp_object);
+    });
+
+    /**
+     * Possivelmente mudar esta funcao para uma classe Client, que define todas as funcoes do client, como clicks, mouse, etc.
+     */
+
+    function update_keys(keys) {
+        socket.emit('update_keys', keys);
+    }
+    function update_mouse(x, y) {
+        socket.emit('update_mouse', { x: x, y: y });
+    }
+    function respawn() {
+        socket.emit('respawn');
+    }
+
+        return false;
+    });
+
+</script>
+    
+</body>
+</html>
